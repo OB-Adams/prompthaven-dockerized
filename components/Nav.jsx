@@ -97,6 +97,7 @@ const Nav = () => {
       <div className="sm:hidden flex relative">
         {session?.user ? (
           <div className="flex">
+            {/* {console.log("session data:", session)} */}
             <Image
               src={session.user.image || "/assets/images/logo.svg"}
               alt="Profile"
