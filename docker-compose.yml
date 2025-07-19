@@ -1,0 +1,36 @@
+services:
+  web-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: promptopia
+    container_name: promptopia-container
+    ports:
+      - 3000:3000
+    env_file:
+      - .env
+
+  mongodb:
+    image: mongo:8.0
+    container_name: mongodb
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - 27017:27017
+    volumes:
+      - mongo-data:/data/db
+
+  mongo-express:
+    image: mongo-express
+    container_name: me-container
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+    env_file:
+      - .env
+
+volumes:
+  mongo-data:
