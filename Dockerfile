@@ -15,7 +15,7 @@ COPY . .
 ENV NODE_ENV=production
 RUN npm run build
 
-FROM node:24-slim AS RUNNER
+FROM node:24-slim AS runner
 
 WORKDIR /app
 

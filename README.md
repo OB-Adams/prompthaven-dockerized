@@ -1,4 +1,4 @@
-# 🧾 Prompthaven – Containerized with Docker & MongoDB
+# 🧾 Prompthaven – Dockerized with MongoDB & NGINX Reverse Proxy
 
 [![Docker](https://img.shields.io/badge/Dockerized-Yes-blue?logo=docker)](https://www.docker.com/)
 [![MongoDB](https://img.shields.io/badge/Database-MongoDB-brightgreen?logo=mongodb)](https://www.mongodb.com/)
@@ -6,9 +6,7 @@
 [![Author](https://img.shields.io/badge/Author-ob--adams-blueviolet)](https://github.com/ob-adams)
 [![CI/CD](https://github.com/ob-adams/prompthaven-dockerized/actions/workflows/docker-image.yml/badge.svg)](https://github.com/ob-adams/prompthaven-dockerized/actions)
 
-This project transforms the Prompthaven Next.js app into a fully containerized system using **Docker**, **MongoDB**, and **Mongo Express**. It uses a **multi-stage Dockerfile** for optimized builds and supports CI/CD with Docker Hub.
-
-> **Repo:** [ob-adams/prompthaven-dockerized](https://github.com/ob-adams/prompthaven-dockerized)
+I containerized my Prompthaven Next.js app using Docker, added MongoDB and Mongo Express, and configured NGINX as a reverse proxy. The project is also CI/CD-ready using GitHub Actions and can be deployed to any VPS—even without a domain.
 
 ---
 
@@ -21,32 +19,27 @@ This project transforms the Prompthaven Next.js app into a fully containerized s
 
 ## 📦 Tech Stack
 
-- [Next.js](https://nextjs.org/) (frontend + API routes)
-- [MongoDB](https://www.mongodb.com/) (database)
-- [Mongo Express](https://github.com/mongo-express/mongo-express) (DB GUI)
-- [Docker](https://www.docker.com/)
-- [Docker Compose](https://docs.docker.com/compose/)
-- [GitHub Actions](https://github.com/features/actions) for CI/CD
+- **Next.js** – App frontend and API routes
+- **MongoDB** – Primary database
+- **Mongo Express** – Web-based DB admin
+- **Docker & Docker Compose** – Containerization
+- **NGINX** – Reverse proxy on the VPS
+- **GitHub Actions** – CI/CD pipeline
 
 ---
 
-## ⚙️ CI/CD – Docker Image Build & Push
+## ⚙️ CI/CD with GitHub Actions
 
-This project includes a GitHub Actions workflow that automates:
+I configured GitHub Actions to automatically build and push Docker images to Docker Hub every time I push to `main`.
 
-- Docker image build (`prompthaven`)
-- Login to Docker Hub
-- Push to Docker Hub: [`obobob/prompthaven`](https://hub.docker.com/r/obobob/prompthaven)
+### 🔐 Required Secrets
 
-### 🔒 Secrets Required:
-
-Set the following in your repository under:
-**Settings → Secrets and variables → Actions**
+I added the following to **GitHub > Settings > Secrets and Variables > Actions**:
 
 - `DOCKER_USERNAME`
 - `DOCKER_PASSWORD`
 
-### 🛠️ Workflow File: `.github/workflows/docker-image.yml`
+### 📄 `.github/workflows/docker-image.yml`
 
 ```yaml
 name: Build and Push Prompthaven
@@ -58,17 +51,13 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: docker/setup-buildx-action@v3
-
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
       - uses: docker/build-push-action@v5
         with:
           context: .
@@ -81,17 +70,15 @@ jobs:
 
 ## 🐳 Docker Architecture
 
-This app is deployed using Docker Compose and includes the following services:
-
 | Service         | Description                                     |
 | --------------- | ----------------------------------------------- |
-| `prompthaven`   | Next.js app, built using multi-stage Dockerfile |
-| `mongodb`       | MongoDB database with secure credentials        |
-| `mongo-express` | Web-based admin GUI for MongoDB                 |
+| `web-app`       | Next.js app with multi-stage Dockerfile         |
+| `mongodb`       | MongoDB with root credentials from `.env`       |
+| `mongo-express` | GUI to manage MongoDB collections and documents |
 
 ---
 
-## 📁 Project Structure
+## 📂 Project Structure
 
 ```
 prompthaven/
@@ -102,7 +89,7 @@ prompthaven/
 ├── .gitignore
 ├── package.json
 ├── public/
-├── app/ or pages/
+├── app/
 ├── .github/
 │   └── workflows/
 │       └── docker-image.yml
@@ -111,14 +98,34 @@ prompthaven/
 
 ---
 
-## 📂 .env File Format
+## 🔁 NGINX Reverse Proxy (VPS)
+
+I installed NGINX on my VPS and configured it to proxy HTTP traffic from port 80 to my containerized Next.js app running on port 3000.
+
+### 🔧 NGINX Config: `/etc/nginx/sites-available/prompthaven`
+
+![Nginx Config](./docs/Screenshot5.png)
+
+### 🔗 Enable and Reload NGINX
+
+![Nginx Config](./docs/Screenshot3.png)
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/prompthaven /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Now when I visit `http://<vps-ip>`, I reach the running app.
+
+---
+
+## 📂 .env Example
 
 ```env
 # MongoDB
 MONGO_INITDB_ROOT_USERNAME=admin1OBOB
 MONGO_INITDB_ROOT_PASSWORD=secret1OBOB
-
-# Used by the Next.js app
 MONGODB_URI=mongodb://admin1OBOB:secret1OBOB@mongodb
 
 # Mongo Express
@@ -130,15 +137,13 @@ ME_CONFIG_BASICAUTH_PASSWORD=secret
 
 ---
 
-## 🧰 Docker Compose Reference
+## 🧰 docker-compose.yml
 
 ```yaml
 services:
   web-app:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: promptopia
     container_name: promptopia-container
     ports:
       - 3000:3000
@@ -176,43 +181,32 @@ volumes:
 ## 🛠️ Dockerfile (Multi-Stage Build)
 
 ```Dockerfile
-FROM node:24-slim AS dep
-
+FROM node:24-slim AS deps
 WORKDIR /app
-
-COPY package.json package-lock.json ./
+COPY package*.json ./
 RUN npm ci
 
 FROM node:24-slim AS builder
-
 WORKDIR /app
-
-COPY --from=dep /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-ENV NODE_ENV=production
 RUN npm run build
 
-FROM node:24-slim AS RUNNER
-
+FROM node:24-slim AS runner
 WORKDIR /app
-
+ENV NODE_ENV=production
+ENV PORT=3000
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
-COPY --from=dep /app/node_modules ./node_modules
-
-ENV NODE_ENV=production
-ENV PORT=3000
-
+COPY --from=deps /app/node_modules ./node_modules
 EXPOSE 3000
-
 CMD ["npm", "start"]
 ```
 
 ---
 
-## 🧾 .dockerignore
+## 📦 .dockerignore
 
 ```dockerignore
 node_modules
@@ -228,54 +222,47 @@ README.md
 
 ---
 
-## 🚀 How to Run Locally
+## 🚀 Local Development
 
 ```bash
-# Build and start all containers
-docker compose up --build
-
-# Stop and remove containers
-docker compose down
+docker compose up --build -d
 ```
 
-Visit the app at: [http://localhost:3000](http://localhost:3000)  
-Visit Mongo Express: [http://localhost:8081](http://localhost:8081)
+![Nginx Config](./docs/Screenshot4.png)
+
+Once running:
+
+- App: [http://localhost:3000](http://localhost:3000)
+- Mongo Express: [http://localhost:8081](http://localhost:8081)
 
 ---
 
-## ☁️ Optional Cloud Deployment
+## ☁️ VPS Deployment Steps
 
-If you prefer to deploy manually or externally:
+Here’s how I deployed Prompthaven to my VPS:
 
-### ➤ Docker Hub
+1. I copied over my project using `scp`
+2. Installed Docker, Docker Compose, and NGINX
+3. Ran `docker compose up -d --build` to start the containers
+4. Configured NGINX to forward traffic from port 80 to my app at port 3000
 
-```bash
-docker tag promptopia obobob/prompthaven
-docker push obobob/prompthaven
-```
-
-### ➤ Render
-
-Connect this repo and configure a Docker service with `.env`.
-
-### ➤ Fly.io
-
-Ideal for deploying Docker images with custom domains and volumes.
+I didn’t need a domain. The app works by accessing `http://<vps-ip>` directly.
 
 ---
 
 ## ✅ Final Notes
 
-- CI/CD builds and pushes the image to Docker Hub on every push to `main`.
-- Multi-stage Dockerfile improves performance and minimizes image size.
-- Environment variables are excluded from version control and builds.
-- All services communicate through Docker’s internal bridge network.
+- NGINX acts as a reverse proxy between external requests and my Dockerized app
+- Docker Compose simplifies multi-container orchestration
+- GitHub Actions handles image builds and Docker Hub pushes
+- Multi-stage Dockerfile keeps image size small and clean
+- Everything is portable and ready for real-world deployment
 
 ---
 
 ## 👤 Author
 
-Developed and containerized by [ob-adams](https://github.com/ob-adams)
+Built with ❤️ by [ob-adams](https://github.com/ob-adams)
 
 ---
 
